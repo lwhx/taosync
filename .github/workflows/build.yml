@@ -4,6 +4,12 @@ on:
   push:
     branches: [ 'main' ]
     paths: [ 'version.txt' ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号 (如: v0.3.3)'
+        required: true
+        type: string
 
 env:
   APP_NAME: taoSync
@@ -24,7 +30,11 @@ jobs:
       - id: getVersion
         name: 获取版本号
         run: |
-          versions=$(head -n 1 version.txt)
+          if [ -n "${{ inputs.version }}" ]; then
+            versions="${{ inputs.version }}"
+          else
+            versions=$(head -n 1 version.txt)
+          fi
           tagList=""
           IFS=',' read -ra versionList <<< "$versions"
           cuVersion="${versionList[0]}"
