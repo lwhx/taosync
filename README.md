@@ -28,17 +28,7 @@
 
 ---
 
-桃桃是我女儿的乳名，我是桃桃她爸，这也是本程序的logo。
 
-本程序开发之初，主要是为了保存桃桃成长的照片，故名`taoSync`
-
-**如果好用，请Star！非常感谢！**  [GitHub](https://github.com/dr34m-cn/taosync) [Gitee](https://gitee.com/dr34m/taosync) [DockerHub](https://hub.docker.com/r/dr34m/tao-sync)
-
-<details>
-
-<summary>点击展开截图</summary>
-
-由于更新频繁，截图仅供参考，以实际为准
 
 #### 作业详情
 
@@ -135,7 +125,7 @@
 * docker
 
 ```sh
-docker run -d --restart=always -p 8023:8023 -v /opt/data:/app/data --name=taoSync dr34m/tao-sync:latest
+docker run -d --restart=always -p 8023:8023 -v /opt/data:/app/data --name=taoSync lwhx/tao-sync:latest
 ```
 
 把其中`/opt/data`替换为你实际的目录
@@ -195,24 +185,4 @@ task_timeout=72
 
 </details>
 
-## 研发状态
 
-历史记录在[这里](https://github.com/dr34m-cn/taosync/tree/main/doc/changelog)；
-
-如想体验研发中的版本(可能存在明显错误或严重bug，不建议小白尝试)，可以尝试到[DockerHub](https://hub.docker.com/r/dr34m/tao-sync)或[Release](https://github.com/dr34m-cn/taosync/releases)找最新的含`dev`或`pre`的tag，例如`v0.1.0-dev-build0`
-
-### 规划中（随时改变or因太难不做了，概不负责）
-
-* windows版本优化（开机自启，隐藏页面，启动停止等）[#13](https://github.com/dr34m-cn/taosync/issues/13)
-* OpenList支持加密同步 [#18](https://github.com/dr34m-cn/taosync/issues/18)
-* 移动端适配（可能顺便开发个app？）
-* 支持本地引擎（不基于`OpenList`）
-* 本地引擎支持加密同步
-* 保留历史N个版本（N可自定义，可无限）
-* 配置导入导出
-* 多语言支持
-* linux一键安装、更新与卸载脚本
-
-## Star随时间
-
-[![Stargazers over time](https://starchart.cc/dr34m-cn/taosync.svg?variant=adaptive)](https://starchart.cc/dr34m-cn/taosync)
