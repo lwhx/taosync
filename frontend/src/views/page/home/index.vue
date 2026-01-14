@@ -19,7 +19,7 @@
 								同步方式
 							</div>
 							<div class="form-box-item-value">
-								{{props.row.method == 0 ? '仅新增' : (props.row.method == 1 ? '全同步': '移动模式')}}
+								{{props.row.method == 0 ? '仅新增' : (props.row.method == 1 ? '全同步': (props.row.method == 2 ? '移动模式' : '备份模式'))}}
 							</div>
 						</div>
 						<div class="form-box-item">
@@ -75,6 +75,14 @@
 										{{item}}
 									</span>
 								</template>
+							</div>
+						</div>
+						<div class="form-box-item" v-if="props.row.method == 3">
+							<div class="form-box-item-label">
+								备份保留数量
+							</div>
+							<div class="form-box-item-value">
+								{{props.row.backupRetain || 10}} 份
 							</div>
 						</div>
 						<div class="form-box-item">
@@ -213,6 +221,10 @@
 									<span style="float: left;margin-right: 16px;">移动模式</span>
 									<span style="float: right; color: #7b9dad; font-size: 13px;">同步完成后删除源目录所有文件</span>
 								</el-option>
+								<el-option label="备份模式" :value="3">
+									<span style="float: left;margin-right: 16px;">备份模式</span>
+									<span style="float: right; color: #7b9dad; font-size: 13px;">备份文件夹并加时间戳，保留指定数量</span>
+								</el-option>
 							</el-select>
 						</el-form-item>
 						<el-form-item prop="useCacheT" label="目标目录扫描缓存">
@@ -275,6 +287,14 @@
 						</el-form-item>
 						<span v-if="editData.method == 2"
 							style="margin-top: -12px;margin-left: 410px;margin-bottom: 18px;color: #f56c6c;font-weight: bold;">移动模式存在风险，可能导致文件丢失（因为会删除源目录文件），该方法应仅用于不重要的文件或有多重备份的文件！希望你知道自己在做什么！</span>
+						<el-form-item prop="backupRetain" label="备份保留数量" v-if="editData.method == 3">
+							<div class="label_width">
+								<el-input v-model.number="editData.backupRetain" placeholder="保留多少份备份文件" class="label_width">
+									<template slot="append">份</template>
+								</el-input>
+								<span style="color: #909399; font-size: 12px;">超过此数量时，将自动删除最早的那份备份</span>
+							</div>
+						</el-form-item>
 						<el-form-item prop="isCron" label="调用方式">
 							<el-select v-model="editData.isCron" class="label_width">
 								<el-option label="间隔" :value="0">
@@ -552,7 +572,8 @@
 					method: 0,
 					interval: 1440,
 					isCron: 0,
-					exclude: []
+					exclude: [],
+					backupRetain: 10
 				}
 				this.cronList.forEach(item => {
 					editData[item.label] = null;

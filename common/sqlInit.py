@@ -4,7 +4,7 @@ from common import sqlBase
 
 @sqlBase.connect_sql
 def init_sql(conn):
-    cuVersion = 250608
+    cuVersion = 260114
     cursor = conn.cursor()
     cursor.execute("SELECT name FROM sqlite_master WHERE name='user_list'")
     passwd = None
@@ -38,7 +38,7 @@ def init_sql(conn):
                        "scanIntervalT integer DEFAULT 0,"   # 目标目录扫描间隔，单位秒
                        "useCacheS integer DEFAULT 0,"       # 扫描源目录时，是否使用缓存，0-不使用，1-使用
                        "scanIntervalS integer DEFAULT 0,"   # 源目录扫描间隔，单位秒
-                       "method integer,"                    # 同步方式，0-仅新增，1-全同步，2-移动模式
+                       "method integer,"                    # 同步方式，0-仅新增，1-全同步，2-移动模式，3-备份模式
                        "interval integer,"                  # 同步间隔，单位：分钟
                        "isCron integer DEFAULT 0,"          # 是否使用cron，0-使用interval, 1-使用cron，2-仅手动
                        "year text DEFAULT NULL,"            # 四位数的年份
@@ -53,6 +53,7 @@ def init_sql(conn):
                        "end_date text DEFAULT NULL,"        # 结束时间
                        "exclude text DEFAULT NULL,"         # 排除无需同步项，类似gitignore语法，英文冒号分隔多个规则
                        "createTime integer DEFAULT (strftime('%s', 'now')),"
+                       "backupRetain integer DEFAULT 10,"   # 备份模式：保留多少份备份文件
                        " unique (srcPath, dstPath, alistId))")
         cursor.execute("create table job_task("
                        "id integer primary key autoincrement,"
@@ -137,6 +138,8 @@ def init_sql(conn):
                 cursor.execute("alter table job add column useCacheS integer DEFAULT 0")
                 cursor.execute("alter table job add column scanIntervalS integer DEFAULT 0")
                 cursor.execute("update job set scanIntervalT = 10, useCacheT = 0 where useCacheT = 2")
+            if sqlVersion < 260114:
+                cursor.execute("alter table job add column backupRetain integer DEFAULT 10")
             cursor.execute(f"update user_list set sqlVersion={cuVersion}")
             conn.commit()
     cursor.close()
