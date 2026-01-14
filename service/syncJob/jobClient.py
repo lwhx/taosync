@@ -29,7 +29,7 @@ class CopyItem:
         self.dstPath = dstPath
         self.fileName = fileName
         self.fileSize = fileSize
-        self.copyType = 0 if method < 2 else 2
+        self.copyType = 0 if method < 2 or method == 3 else 2  # 0-复制, 1-删除, 2-移动; 备份模式(method=3)使用复制
         self.alistTaskId = None
         self.status = 0
         self.progress = 0.0
@@ -517,7 +517,8 @@ class JobTask:
     def syncBackup(self):
         """
         备份模式同步方法
-        从源目录选择需要备份的文件夹，备份到目标目录，文件夹名字后面加时间戳
+        将整个源目录备份到目标目录，备份文件夹名为：源目录名_时间戳
+        例如：源目录 /沙发/ 备份到目标目录后为 沙发_20260114_194956/
         备份完成后，保留指定数量的备份，删除最早的备份
         """
         srcPath = self.job['srcPath']
@@ -527,92 +528,70 @@ class JobTask:
             spec = PathSpec.from_lines(GitWildMatchPattern, jobExclude.split(':'))
         if not srcPath.endswith('/'):
             srcPath = srcPath + '/'
-        
+
+        # 获取源目录名（例如 /沙发/ -> 沙发）
+        srcFolderName = srcPath.rstrip('/').split('/')[-1]
+        if not srcFolderName:
+            # 如果源目录是根目录 /，使用特殊命名
+            srcFolderName = 'root'
+
         # 生成时间戳
         timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        backupFolderName = f'{srcFolderName}_{timestamp}/'
+
         retainCount = self.job.get('backupRetain', 10)
         if retainCount is None:
             retainCount = 10
-        
+
         dstPathList = self.job['dstPath'].split(':')
-        
+
         for dstItem in dstPathList:
             if self.breakFlag:
                 break
-            
+
             # 确保目标路径以 / 结尾
             if not dstItem.endswith('/'):
                 dstItem = dstItem + '/'
-            
-            # 扫描源目录
+
+            # 完整的备份目标路径
+            fullBackupPath = dstItem + backupFolderName
+
+            # 创建目标备份文件夹
+            status = 2
+            errMsg = None
+            try:
+                self.alistClient.mkdir(fullBackupPath, self.job['scanIntervalT'])
+            except Exception as e:
+                status = 7
+                errMsg = str(e)
+            # 记录目录创建回调
+            self.copyHook(srcPath, fullBackupPath, None, None, status=status, errMsg=errMsg, isPath=1)
+
+            if status != 2:
+                continue
+
+            # 扫描源目录内容并复制到备份文件夹
             try:
                 srcFiles = self.listDir(srcPath, True, spec, srcPath, True)
             except Exception as e:
                 logger = logging.getLogger()
                 logger.error(f'Backup mode: failed to scan source directory: {e}')
                 continue
-            
-            # 获取目标目录的现有备份文件夹
-            try:
-                dstFiles = self.listDir(dstItem, True, None, dstItem, False)
-                # 找出所有带时间戳的备份文件夹（格式：原文件夹名_YYYYMMDD_HHMMSS）
-                backupMap = {}  # {originalName: [(timestamp, folderName, createTime), ...]}
-                for fName in dstFiles.keys():
-                    if fName.endswith('/'):
-                        # 检查是否是备份文件夹
-                        # 格式可能是: folderName_20250114_153022/
-                        match = re.match(r'^(.+)_(\d{8}_\d{6})/$', fName)
-                        if match:
-                            origName = match.group(1)
-                            tsStr = match.group(2)
-                            try:
-                                # 将时间戳转换为 createTime
-                                ts = datetime.datetime.strptime(tsStr, '%Y%m%d_%H%M%S')
-                                createTime = int(ts.timestamp())
-                                if origName not in backupMap:
-                                    backupMap[origName] = []
-                                backupMap[origName].append((createTime, fName[:-1], tsStr))
-                            except Exception:
-                                pass
-            except Exception:
-                dstFiles = {}
-                backupMap = {}
-            
-            # 对每个源文件夹进行备份
+
+            # 递归复制所有内容到备份文件夹
             for srcItem in srcFiles.keys():
                 if self.breakFlag:
                     break
-                
-                # 只备份文件夹
-                if not srcItem.endswith('/'):
-                    # 文件级备份：直接复制文件到目标目录
-                    self.copyFile(srcPath, dstItem, srcItem, srcFiles[srcItem])
-                    continue
-                
-                # 文件夹备份：创建带时间戳的文件夹
-                folderName = srcItem[:-1]  # 去掉尾部斜杠
-                backupFolderName = f'{folderName}_{timestamp}/'
-                dstPathWithBackup = dstItem + backupFolderName
-                
-                # 创建目标备份文件夹
-                status = 2
-                errMsg = None
-                try:
-                    self.alistClient.mkdir(dstPathWithBackup, self.job['scanIntervalT'])
-                except Exception as e:
-                    status = 7
-                    errMsg = str(e)
-                # 记录目录创建回调
-                self.copyHook(srcPath + srcItem, dstPathWithBackup, None, None, status=status, errMsg=errMsg, isPath=1)
-                
-                if status != 2:
-                    continue
-                
-                # 递归复制源文件夹内容到备份文件夹
-                self.syncBackupFolder(srcPath + srcItem, dstPathWithBackup, spec, srcPath, dstPathWithBackup)
-            
+
+                if srcItem.endswith('/'):
+                    # 是目录，创建并递归复制
+                    self.syncBackupFolder(srcPath + srcItem, fullBackupPath, spec, srcPath, fullBackupPath)
+                else:
+                    # 是文件，直接复制
+                    self.copyFile(srcPath, fullBackupPath, srcItem, srcFiles[srcItem])
+
             # 清理旧备份（保留指定数量）
-            self.cleanupOldBackups(dstItem, backupMap, retainCount)
+            self.cleanupOldBackupsByName(dstItem, srcFolderName, retainCount)
     
     def syncBackupFolder(self, srcPath, dstPath, spec, srcRootPath, dstRootPath):
         """
@@ -661,18 +640,18 @@ class JobTask:
         """
         if self.breakFlag:
             return
-        
+
         if retainCount <= 0:
             return  # 不清理
-        
+
         for origName, backups in backupMap.items():
             if len(backups) <= retainCount:
                 continue
-            
+
             # 按时间排序，删除最早的
             backups.sort(key=lambda x: x[0])  # 按 createTime 排序
             toDelete = backups[:-retainCount]  # 保留最新的 retainCount 个
-            
+
             for createTime, folderName, tsStr in toDelete:
                 # 删除旧备份文件夹
                 try:
@@ -681,6 +660,58 @@ class JobTask:
                 except Exception as e:
                     logger = logging.getLogger()
                     logger.warning(f'Failed to delete old backup {folderName}: {e}')
+
+    def cleanupOldBackupsByName(self, dstPath, srcFolderName, retainCount):
+        """
+        清理指定名称的旧备份，只保留指定数量的最新备份
+        :param dstPath: 目标目录
+        :param srcFolderName: 源文件夹名（例如：沙发）
+        :param retainCount: 保留数量
+        """
+        if self.breakFlag:
+            return
+
+        if retainCount <= 0:
+            return  # 不清理
+
+        # 获取目标目录的现有备份文件夹
+        try:
+            dstFiles = self.listDir(dstPath, True, None, dstPath, False)
+            # 找出所有匹配的备份文件夹（格式：srcFolderName_YYYYMMDD_HHMMSS）
+            backups = []  # [(createTime, folderName), ...]
+            for fName in dstFiles.keys():
+                if fName.endswith('/'):
+                    # 检查是否是匹配的备份文件夹
+                    # 格式: 沙发_20250114_153022/
+                    match = re.match(rf'^{re.escape(srcFolderName)}_(\d{{8}}_\d{{6}})/$', fName)
+                    if match:
+                        tsStr = match.group(1)
+                        try:
+                            # 将时间戳转换为 createTime
+                            ts = datetime.datetime.strptime(tsStr, '%Y%m%d_%H%M%S')
+                            createTime = int(ts.timestamp())
+                            backups.append((createTime, fName[:-1]))  # 去掉尾部斜杠
+                        except Exception:
+                            pass
+        except Exception:
+            return
+
+        # 检查是否需要清理
+        if len(backups) <= retainCount:
+            return
+
+        # 按时间排序，删除最早的
+        backups.sort(key=lambda x: x[0])  # 按 createTime 排序
+        toDelete = backups[:-retainCount]  # 保留最新的 retainCount 个
+
+        for createTime, folderName in toDelete:
+            # 删除旧备份文件夹
+            try:
+                self.alistClient.deleteFile(dstPath, [folderName], self.job['scanIntervalT'])
+                self.delHook(dstPath, folderName + '/', None, 2, None, 1, int(time.time()))
+            except Exception as e:
+                logger = logging.getLogger()
+                logger.warning(f'Failed to delete old backup {folderName}: {e}')
 
     def updateTaskStatus(self):
         """

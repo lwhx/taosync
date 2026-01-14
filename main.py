@@ -40,9 +40,13 @@ async def main():
 
 
 if __name__ == "__main__":
+    # 切换到脚本所在目录
+    scriptDir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(scriptDir)
+
     onStart.init()
     cfg = getConfig()
-    frontendPath = sys._MEIPASS if getattr(sys, 'frozen', False) else '.'
+    frontendPath = sys._MEIPASS if getattr(sys, 'frozen', False) else scriptDir
     # 后端配置
     server = cfg['server']
     asyncio.run(main())
